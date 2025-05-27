@@ -261,6 +261,7 @@ export default function AgeVerifier() {
               setSignals(null);
               setShowProofDetails(false);
               setAgeVerificationResult(null);
+              setCurrentStep(0);
             }}
             className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
           >
@@ -283,7 +284,7 @@ export default function AgeVerifier() {
         </p>
       )}
 
-      {ageVerificationResult !== null && (
+      {ageVerificationResult !== null && currentStep === 4 && (
         <div
           className={`p-4 rounded-lg border-2 ${
             ageVerificationResult
