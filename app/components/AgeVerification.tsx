@@ -22,6 +22,8 @@ export default function AgeVerifier() {
   const [status, setStatus] = useState<string | null>(null);
   const [proof, setProof] = useState<snarkjs.Groth16Proof | null>(null);
   const [signals, setSignals] = useState<string[] | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
+
   const [showProofDetails, setShowProofDetails] = useState(false);
   const [ageVerificationResult, setAgeVerificationResult] = useState<
     boolean | null
@@ -139,65 +141,130 @@ export default function AgeVerifier() {
 
   return (
     <div className="space-y-6">
-      <textarea
-        rows={4}
-        placeholder="Paste JWT token here"
-        value={token}
-        onChange={(e) => setToken(e.target.value)}
-        className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
-      />
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            JWT Token
+          </label>
+          <textarea
+            rows={4}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
 
-      <textarea
-        rows={3}
-        placeholder="Claims (one per line)"
-        value={claimsInput}
-        onChange={(e) => setClaimsInput(e.target.value)}
-        className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
-      />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Claims (one per line, base64 encoded)
+          </label>
+          <textarea
+            rows={3}
+            value={claimsInput}
+            onChange={(e) => setClaimsInput(e.target.value)}
+            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
 
-      <textarea
-        rows={6}
-        placeholder="JWK JSON"
-        value={JSON.stringify(jwk, null, 2)}
-        onChange={(e) => {
-          try {
-            setJwk(JSON.parse(e.target.value));
-          } catch {
-            setStatus("❌ Invalid JWK");
-          }
-        }}
-        className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
-      />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            JWK Public Key (JSON format)
+          </label>
+          <textarea
+            rows={6}
+            value={JSON.stringify(jwk, null, 2)}
+            onChange={(e) => {
+              try {
+                setJwk(JSON.parse(e.target.value));
+              } catch {
+                setStatus("❌ Invalid JWK");
+              }
+            }}
+            className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
 
       <div className="border-t pt-6">
         <h2 className="text-2xl font-bold mb-4 text-gray-800">
           Age Verification Actions
         </h2>
 
+        <div className="w-full mb-4">
+          <div className="flex justify-between mb-1 text-sm text-gray-600 font-medium">
+            <span>Step {currentStep} of 4</span>
+            <span>
+              {currentStep === 1 && "Loaded"}
+              {currentStep === 2 && "Validated"}
+              {currentStep === 3 && "Proof Generated"}
+              {currentStep === 4 && "Verified"}
+              {currentStep === 0 && "Idle"}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(currentStep / 4) * 100}%` }}
+            />
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={loadTest}
+            onClick={() => {
+              loadTest();
+              setCurrentStep(1);
+            }}
             className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
           >
-            Load Test
+            1. Load Test
           </button>
           <button
-            onClick={handleValidate}
+            onClick={async () => {
+              await handleValidate();
+              setCurrentStep(2);
+            }}
             className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Validate JWT
+            2. Validate JWT
           </button>
           <button
-            onClick={handleGenerate}
+            onClick={async () => {
+              await handleGenerate();
+              setCurrentStep(3);
+            }}
             className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Generate Proof
+            3. Generate Proof
           </button>
           <button
-            onClick={handleVerify}
+            onClick={async () => {
+              await handleVerify();
+              setCurrentStep(4);
+            }}
             className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
-            Verify Proof
+            4. Verify Proof
+          </button>
+          <button
+            onClick={() => {
+              setToken("");
+              setClaimsInput("");
+              setJwk({
+                kty: "EC",
+                crv: "P-256",
+                x: "rJUIrWnliWn5brtxVJPlGNZl2hKTosVMlWDc-G-gScM",
+                y: "mm3p9quG010NysYgK-CAQz2E-wTVSNeIHl_HvWaaM6I",
+              });
+              setStatus(null);
+              setProof(null);
+              setSignals(null);
+              setShowProofDetails(false);
+              setAgeVerificationResult(null);
+            }}
+            className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            5. Reset
           </button>
         </div>
       </div>
