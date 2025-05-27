@@ -40,7 +40,7 @@ export default function Home() {
                 </button>
               </div>
               <a
-                href="https://github.com/adria0/seediq-playground"
+                href="https://github.com/privacy-scaling-explorations/zkID"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center text-white hover:text-gray-200 focus:outline-none focus:ring-2 focus:ring-white rounded"
