@@ -102,6 +102,7 @@ export default function AgeVerifier() {
 
       setStatus("✅ Proof generated");
     } catch {
+      setCurrentStep(2);
       setStatus("❌ Proof generation failed");
     }
   };
