@@ -4,12 +4,11 @@ import { useState } from "react";
 import { sha256 } from "@noble/hashes/sha256";
 import { base64url } from "jose";
 import { verifyJWT } from "../utils/utils";
-import { AgeProver, fetchBinary } from "../utils/prover";
+import { AgeProver } from "../utils/prover";
 import * as snarkjs from "snarkjs";
 
 import { JwkEcdsaPublicKey } from "../utils/es256";
 import { generateAgeInputs } from "../utils/generate_inputs";
-import { AGE_CIRCUIT_ASSETS } from "../utils/constant";
 
 export default function AgeVerifier() {
   const [token, setToken] = useState("");
@@ -23,6 +22,10 @@ export default function AgeVerifier() {
   const [status, setStatus] = useState<string | null>(null);
   const [proof, setProof] = useState<snarkjs.Groth16Proof | null>(null);
   const [signals, setSignals] = useState<string[] | null>(null);
+  const [showProofDetails, setShowProofDetails] = useState(false);
+  const [ageVerificationResult, setAgeVerificationResult] = useState<
+    boolean | null
+  >(null);
 
   const handleValidate = async () => {
     if (!token || !claimsInput) {
@@ -68,6 +71,7 @@ export default function AgeVerifier() {
 
   const handleGenerate = async () => {
     setStatus("⏳ Generating proof...");
+    setAgeVerificationResult(null);
     try {
       const claims = claimsInput
         .split("\n")
@@ -79,21 +83,21 @@ export default function AgeVerifier() {
       );
 
       const inputs = await generateAgeInputs(token, jwk, hashedClaims);
-      const wasm = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.WASM));
-      const zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.ZKEY));
 
-      const { proof, publicSignals } = await snarkjs.groth16.fullProve(
+      const { proof, publicSignals } = await AgeProver.generateProof(
         JSON.parse(
           JSON.stringify(inputs, (_, v) =>
             typeof v === "bigint" ? v.toString() : v
           )
-        ),
-        wasm,
-        zkey
+        )
       );
 
       setProof(proof);
       setSignals(publicSignals);
+
+      const isAgeAbove18 = publicSignals && publicSignals[0] === "1";
+      setAgeVerificationResult(isAgeAbove18);
+
       setStatus("✅ Proof generated");
     } catch {
       setStatus("❌ Proof generation failed");
@@ -108,9 +112,18 @@ export default function AgeVerifier() {
     setStatus("⏳ Verifying proof...");
     try {
       const ok = await AgeProver.verifyProof(proof, signals);
-      setStatus(ok ? "✅ Proof valid" : "❌ Proof invalid");
+      if (ok) {
+        // Check if age is above 18 based on public signals
+        const isAgeAbove18 = signals && signals[0] === "1";
+        setAgeVerificationResult(isAgeAbove18);
+        setStatus("✅ Proof valid");
+      } else {
+        setStatus("❌ Proof invalid");
+        setAgeVerificationResult(null);
+      }
     } catch {
       setStatus("❌ Verification error");
+      setAgeVerificationResult(null);
     }
   };
 
@@ -156,36 +169,42 @@ export default function AgeVerifier() {
         className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
       />
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={loadTest}
-          className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300"
-        >
-          Load Test
-        </button>
-        <button
-          onClick={handleValidate}
-          className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
-        >
-          Validate JWT
-        </button>
-        <button
-          onClick={handleGenerate}
-          className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Generate Proof
-        </button>
-        <button
-          onClick={handleVerify}
-          className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          Verify Proof
-        </button>
+      <div className="border-t pt-6">
+        <h2 className="text-2xl font-bold mb-4 text-gray-800">
+          Age Verification Actions
+        </h2>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={loadTest}
+            className="px-5 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+          >
+            Load Test
+          </button>
+          <button
+            onClick={handleValidate}
+            className="px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Validate JWT
+          </button>
+          <button
+            onClick={handleGenerate}
+            className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Generate Proof
+          </button>
+          <button
+            onClick={handleVerify}
+            className="px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Verify Proof
+          </button>
+        </div>
       </div>
 
       {status && (
         <p
-          className={`text-lg ${
+          className={`text-lg font-medium ${
             status.startsWith("✅")
               ? "text-green-600"
               : status.startsWith("⏳")
@@ -197,22 +216,74 @@ export default function AgeVerifier() {
         </p>
       )}
 
-      {proof && (
-        <section>
-          <h2 className="text-xl font-medium">Proof</h2>
-          <pre className="bg-gray-100 p-4 rounded-lg overflow-auto">
-            {JSON.stringify(proof, null, 2)}
-          </pre>
-        </section>
+      {ageVerificationResult !== null && (
+        <div
+          className={`p-4 rounded-lg border-2 ${
+            ageVerificationResult
+              ? "bg-green-50 border-green-200 text-green-800"
+              : "bg-red-50 border-red-200 text-red-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">
+              {ageVerificationResult ? "✅" : "❌"}
+            </span>
+            <span className="text-xl font-semibold">
+              Age Verification:{" "}
+              {ageVerificationResult ? "Above 18" : "Below 18"}
+            </span>
+          </div>
+          <p className="mt-2 text-sm">
+            The zero-knowledge proof{" "}
+            {ageVerificationResult ? "confirms" : "indicates"} that the person
+            is{" "}
+            {ageVerificationResult ? "18 years or older" : "under 18 years old"}
+            .
+          </p>
+        </div>
       )}
 
-      {signals && (
-        <section>
-          <h2 className="text-xl font-medium">Public Signals</h2>
-          <pre className="bg-gray-100 p-4 rounded-lg overflow-auto">
-            {JSON.stringify(signals, null, 2)}
-          </pre>
-        </section>
+      {(proof || signals) && (
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-medium text-gray-800">Proof Details</h2>
+            <button
+              onClick={() => setShowProofDetails(!showProofDetails)}
+              className="px-3 py-1 text-sm bg-gray-200 hover:bg-gray-300 rounded-md transition-colors"
+            >
+              {showProofDetails ? "Hide Details" : "View Details"}
+            </button>
+          </div>
+
+          {showProofDetails && (
+            <div className="mt-4 space-y-4">
+              {proof && (
+                <section>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">
+                    Zero-Knowledge Proof
+                  </h3>
+                  <pre className="bg-white p-4 rounded-lg overflow-auto text-sm border">
+                    {JSON.stringify(proof, null, 2)}
+                  </pre>
+                </section>
+              )}
+
+              {signals && (
+                <section>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">
+                    Public Signals
+                  </h3>
+                  <pre className="bg-white p-4 rounded-lg overflow-auto text-sm border">
+                    {JSON.stringify(signals, null, 2)}
+                  </pre>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Signal value: {signals[0]} (1 = Above 18, 0 = Below 18)
+                  </p>
+                </section>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
