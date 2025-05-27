@@ -8,7 +8,6 @@ import {
 import * as snarkjs from "snarkjs";
 
 const JWT_IPFS_GATEWAYS = [
-  "https://ipfs.io/ipfs/",
   "https://gateway.pinata.cloud/ipfs/",
   "https://dweb.link/ipfs/",
   "https://cloudflare-ipfs.com/ipfs/",

@@ -78,7 +78,7 @@ export default function AgeVerifier() {
         base64url.encode(sha256(e)).toString()
       );
 
-      const inputs = generateAgeInputs(token, jwk, hashedClaims);
+      const inputs = await generateAgeInputs(token, jwk, hashedClaims);
       const wasm = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.WASM));
       const zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.ZKEY));
 
