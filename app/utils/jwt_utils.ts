@@ -1,5 +1,6 @@
 import { toByteArray } from "base64-js";
 import { BerReader } from "asn1";
+import { sha256Pad_circom } from "./sha-pad";
 
 // Convert a string to an array of BigInts
 export function stringToPaddedBigIntArray(
@@ -67,4 +68,28 @@ export function extractXYFromPEM(pk: string) {
   const y = xy.subarray(32);
 
   return [bufferToBigInt(x), bufferToBigInt(y)];
+}
+export async function encodeClaims(
+  claims: string[],
+  maxClaims: number,
+  maxClaimsLength: number
+): Promise<{ claimArray: bigint[][]; claimLengths: bigint[] }> {
+  const claimArray = Array(maxClaims)
+    .fill(null)
+    .map(() => Array(maxClaimsLength).fill(0n));
+  const claimLengths = Array(maxClaims).fill(0n);
+
+  for (let i = 0; i < claims.length && i < maxClaims; i++) {
+    const claim = claims[i];
+    const utf8Bytes = Uint8Array.from(Buffer.from(claim, "utf8"));
+    const [paddedBytes] = await sha256Pad_circom(utf8Bytes, maxClaimsLength);
+
+    for (let j = 0; j < paddedBytes.length && j < maxClaimsLength; j++) {
+      claimArray[i][j] = BigInt(paddedBytes[j]);
+    }
+
+    claimLengths[i] = BigInt(claim.length);
+  }
+
+  return { claimArray, claimLengths };
 }
