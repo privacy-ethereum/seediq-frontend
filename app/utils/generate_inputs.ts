@@ -23,21 +23,15 @@ export async function generateAgeInputs(
   //   "pVOw2Nj57G2NkeVHBCWwhEBjufSJhp9lp3m5W9mAh9A",
   // ];
 
-  const [token, ...claims] = token_with_claims.split("~");
+  let [token, ...claims] = token_with_claims.split("~");
+  claims = claims.map((c) => c.trim()).filter(Boolean);
 
-  // // JSON Web Key Set(JWKS) taken from "jku":"https://issuer-vc-uat.wallet.gov.tw/api/keys",
-  // const jwk = {
-  //   kty: "EC",
-  //   crv: "P-256",
-  //   kid: "key-1",
-  //   x: "rJUIrWnliWn5brtxVJPlGNZl2hKTosVMlWDc-G-gScM",
-  //   y: "mm3p9quG010NysYgK-CAQz2E-wTVSNeIHl_HvWaaM6I",
-  // };
-
+  // // JSON Web Key Set(JWKS) https://issuer-vc.wallet.gov.tw/api/keys
   const params = generateAgeJwtCircuitParams([
-    43, 6, 2048, 256, 2000, 3, 50, 128,
+    43, 6, 3072, 256, 2200, 8, 50, 128,
   ]);
-  const inputs = await generateAgeJwtInputs(
+
+  let inputs = await generateAgeJwtInputs(
     params,
     token,
     jwk,

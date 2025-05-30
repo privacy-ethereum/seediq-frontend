@@ -63,7 +63,6 @@ export function generateES256Inputs(
   // decode public key
   let x, y;
   if ("pem" in pk) {
-    console.log(pk);
     const pk1 = pk.pem
       .replace("-----BEGIN PUBLIC KEY-----", "")
       .replace("-----END PUBLIC KEY-----", "")
@@ -122,7 +121,6 @@ export async function generateES256AgeInputs(
   // decode public key
   let x, y;
   if ("pem" in pk) {
-    console.log(pk);
     const pk1 = pk.pem
       .replace("-----BEGIN PUBLIC KEY-----", "")
       .replace("-----END PUBLIC KEY-----", "")

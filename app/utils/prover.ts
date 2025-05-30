@@ -1,7 +1,6 @@
 import {
   AGE_CIRCUIT_ASSETS,
   AgeCircuitInput,
-  DEFAULT_AGE_INPUT,
   JWT_CIRCUIT_ASSETS,
   JWTCircuitInput,
 } from "./constant";
@@ -82,9 +81,6 @@ export class AgeProver {
     try {
       const wasm = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.WASM));
       const zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.ZKEY));
-
-      console.log("default", DEFAULT_AGE_INPUT);
-      console.log("inputs", inputs);
 
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
         inputs,

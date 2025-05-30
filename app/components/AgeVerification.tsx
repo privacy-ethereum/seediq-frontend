@@ -6,7 +6,6 @@ import { base64url } from "jose";
 import { verifyJWT } from "../utils/utils";
 import { AgeProver } from "../utils/prover";
 import * as snarkjs from "snarkjs";
-
 import { JwkEcdsaPublicKey } from "../utils/es256";
 import { generateAgeInputs } from "../utils/generate_inputs";
 
@@ -16,24 +15,46 @@ export default function AgeVerifier() {
   const [jwk, setJwk] = useState<JwkEcdsaPublicKey>({
     kty: "EC",
     crv: "P-256",
-    x: "rJUIrWnliWn5brtxVJPlGNZl2hKTosVMlWDc-G-gScM",
-    y: "mm3p9quG010NysYgK-CAQz2E-wTVSNeIHl_HvWaaM6I",
+    kid: "key-1",
+    x: "dnQ2W9ZTsILYac3XdcvxrYNgIgjSkGJUMecMXVJk7XM",
+    y: "0WhT_VgvnhNNj9aabTn4E4enR-iqbCrQtY9UWqD4XJY",
   });
   const [status, setStatus] = useState<string | null>(null);
   const [proof, setProof] = useState<snarkjs.Groth16Proof | null>(null);
   const [signals, setSignals] = useState<string[] | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
-
   const [showProofDetails, setShowProofDetails] = useState(false);
   const [ageVerificationResult, setAgeVerificationResult] = useState<
     boolean | null
   >(null);
+  const [showClaimsDetails, setShowClaimsDetails] = useState(false);
+
+  const parsedClaims = claimsInput
+    .split("\n")
+    .map((claim) => claim.trim())
+    .filter(Boolean)
+    .map((claim, index) => {
+      try {
+        const decoded = atob(claim.replace(/-/g, "+").replace(/_/g, "/"));
+        return { encoded: claim, decoded: decoded, index: index + 1 };
+      } catch {
+        return {
+          encoded: claim,
+          decoded: "Invalid encoding",
+          index: index + 1,
+        };
+      }
+    })
+    .filter((claim) => {
+      return claim.decoded.includes("roc_birthday");
+    });
 
   const handleValidate = async () => {
     if (!token || !claimsInput) {
       setStatus("❌ Please provide both JWT and claims");
       return;
     }
+
     setStatus("⏳ Validating...");
     try {
       let token_Without_claims = token.split("~")[0];
@@ -41,30 +62,25 @@ export default function AgeVerifier() {
       if (!validSig) throw new Error("Invalid signature");
 
       const payload = JSON.parse(atob(token_Without_claims.split(".")[1]));
-      const sd = payload?.vc?.credentialSubject?._sd;
+      let sd = payload?.vc?.credentialSubject?._sd;
+
       if (!Array.isArray(sd)) {
         setStatus("✅ Signature valid (no claims to check)");
         return;
       }
 
       const claims = claimsInput.trim().split(/\r?\n/);
+      let hashed = claims.map((c) => base64url.encode(sha256(c)));
+      sd = sd.sort();
+      hashed = hashed.sort();
 
-      // decode the age claim 2
-      const ageClaim = atob(claims[1]);
-      const roc_birthday = ageClaim.split(",")[1];
-
-      if (roc_birthday === "roc_birthday") {
-        setStatus("❌ Invalid ROC birthday claim format");
-        return;
-      }
-
-      const hashed = claims.map((c) => base64url.encode(sha256(c)));
       for (let i = 0; i < sd.length; i++) {
         if (sd[i] !== hashed[i]) {
           setStatus(`❌ Claim #${i + 1} mismatch`);
           return;
         }
       }
+
       setStatus("✅ Signature and Age Claim match Successfully");
     } catch (err) {
       setStatus(`❌ ${err instanceof Error ? err.message : "Error"}`);
@@ -74,6 +90,7 @@ export default function AgeVerifier() {
   const handleGenerate = async () => {
     setStatus("⏳ Generating proof...");
     setAgeVerificationResult(null);
+
     try {
       const claims = claimsInput
         .split("\n")
@@ -84,7 +101,7 @@ export default function AgeVerifier() {
         base64url.encode(sha256(e)).toString()
       );
 
-      const inputs = await generateAgeInputs(token, jwk, hashedClaims);
+      let inputs = await generateAgeInputs(token, jwk, hashedClaims);
 
       const { proof, publicSignals } = await AgeProver.generateProof(
         JSON.parse(
@@ -112,11 +129,12 @@ export default function AgeVerifier() {
       setStatus("❌ No proof/signals");
       return;
     }
+
     setStatus("⏳ Verifying proof...");
+
     try {
       const ok = await AgeProver.verifyProof(proof, signals);
       if (ok) {
-        // Check if age is above 18 based on public signals
         const isAgeAbove18 = signals && signals[0] === "1";
         setAgeVerificationResult(isAgeAbove18);
         setStatus("✅ Proof valid");
@@ -131,12 +149,14 @@ export default function AgeVerifier() {
   };
 
   const loadTest = () => {
-    setToken(
-      "eyJqa3UiOiJodHRwczovL2lzc3Vlci12Yy11YXQud2FsbGV0Lmdvdi50dy9hcGkva2V5cyIsImtpZCI6ImtleS0xIiwidHlwIjoidmMrc2Qtand0IiwiYWxnIjoiRVMyNTYifQ.eyJzdWIiOiJkaWQ6a2V5OnpZcU52VkNrWVhhTXNGVVhEemJvRk1DMXRSV0ZjOHBUTGRONTgzb3FhcG9LNk1veno5dEVWVWpYU2lDN3Y2eXlOR0I4TW5DZUh1SE5hWlpzczFYS1E5dktzY2EyN0VIM0NQTXFSSnN5b2pqdXRyNEtrMzJaWVE0TDRjdHpZaDVHMWhrR1I3VFlhQ0Q3ekczWU1WS0V2dWQxejhZVnR5N2lxZzhBVTZxQ3hvS25ibkVVNnJEQSIsIm5iZiI6MTczOTgxNjY3MiwiaXNzIjoiZGlkOmtleTp6MmRtekQ4MWNnUHg4VmtpN0pidXVNbUZZcldQZ1lveXR5a1VaM2V5cWh0MWo5S2JzWTlEUnFTQ2d6elJ1RmJwcTlxd0pUTGtCbm1tQlhoZFNkcTZCREpSTXg2dENHMWp0a2R3Z0tYTmZOMXFXRVJEdnhhYzVyWTZoY25GUDdIdjYzaU01eTNWeHRNTjRUc3h5WnZibnJhcFcyUnBGb3ZFMURKNG03ZURWTFN1cUd0YzFpIiwiY25mIjp7Imp3ayI6eyJrdHkiOiJFQyIsImNydiI6IlAtMjU2IiwieCI6IlBrcV82ZDJpeUIwZGVvalYyLXlta0ZWeUpNeElfTDlHZVF4aDBORExoNDQ9IiwieSI6IjBOZnFMdmUtSXEwSFZZUE11eEctWHpRNUlmNktaOFhvQ0hkNmZOaDhsZFU9In19LCJleHAiOjY3OTc3NzcxODcyLCJ2YyI6eyJAY29udGV4dCI6WyJodHRwczovL3d3dy53My5vcmcvMjAxOC9jcmVkZW50aWFscy92MSJdLCJ0eXBlIjpbIlZlcmlmaWFibGVDcmVkZW50aWFsIiwiOTM1ODE5MjVfZGQiXSwiY3JlZGVudGlhbFN0YXR1cyI6eyJ0eXBlIjoiU3RhdHVzTGlzdDIwMjFFbnRyeSIsImlkIjoiaHR0cHM6Ly9pc3N1ZXItdmMtdWF0LndhbGxldC5nb3YudHcvYXBpL3N0YXR1cy1saXN0LzkzNTgxOTI1X2RkL3IwIzYiLCJzdGF0dXNMaXN0SW5kZXgiOiI2Iiwic3RhdHVzTGlzdENyZWRlbnRpYWwiOiJodHRwczovL2lzc3Vlci12Yy11YXQud2FsbGV0Lmdvdi50dy9hcGkvc3RhdHVzLWxpc3QvOTM1ODE5MjVfZGQvcjAiLCJzdGF0dXNQdXJwb3NlIjoicmV2b2NhdGlvbiJ9LCJjcmVkZW50aWFsU2NoZW1hIjp7ImlkIjoiaHR0cHM6Ly9mcm9udGVuZC11YXQud2FsbGV0Lmdvdi50dy9hcGkvc2NoZW1hLzkzNTgxOTI1L2RkL1YxL2Q0ZDFhMGY5LTNmMDktNGMyZS1iODk5LTA4YzM0NDkwYzhlYSIsInR5cGUiOiJKc29uU2NoZW1hIn0sImNyZWRlbnRpYWxTdWJqZWN0Ijp7Il9zZCI6WyJKY2lHYzViS2lkT0dteGp1dkM4TGRVeWthVlhCWEJQaEJYMWtYcERlLUxvIiwicFZPdzJOajU3RzJOa2VWSEJDV3doRUJqdWZTSmhwOWxwM201VzltQWg5QSJdLCJfc2RfYWxnIjoic2hhLTI1NiJ9fSwibm9uY2UiOiJCSElDVTI2TiIsImp0aSI6Imh0dHBzOi8vaXNzdWVyLXZjLXVhdC53YWxsZXQuZ292LnR3L2FwaS9jcmVkZW50aWFsLzRmYzNiYTY1LTY1ZGQtNDEyNC05ZTczLWNhOWY0OWNkNzc2NyJ9.h0wBjwjBDb48wZ_XVWnnrRrWh2Sgd4Lq7sc72N54svJFklnFuHebxvn-Ui6jftnQbPnLTKEyJbE75DatCkfkdQ~WyJ1cWJ5Y0VSZlN4RXF1a0dtWGwyXzl3IiwibmFtZSIsImRlbmtlbmkiXQ~WyJYMXllNDloV0s1bTJneWFBLXROQXRnIiwicm9jX2JpcnRoZGF5IiwiMDc1MDEwMSJd"
-    );
-    setClaimsInput(
-      `WyJ1cWJ5Y0VSZlN4RXF1a0dtWGwyXzl3IiwibmFtZSIsImRlbmtlbmkiXQ\nWyJYMXllNDloV0s1bTJneWFBLXROQXRnIiwicm9jX2JpcnRoZGF5IiwiMDc1MDEwMSJd`
-    );
+    let token_with_claims =
+      "eyJqa3UiOiJodHRwczovL2lzc3Vlci12Yy53YWxsZXQuZ292LnR3L2FwaS9rZXlzIiwia2lkIjoia2V5LTEiLCJ0eXAiOiJ2YytzZC1qd3QiLCJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJkaWQ6a2V5OnoyZG16RDgxY2dQeDhWa2k3SmJ1dU1tRllyV1BvZHJaU3FNYkN5OU5kdTRVZ1VHeTNSTmtoSDQ3OWVMUHBiZkFoVlNOdTdCNG9KdlV3THp5eGlQNEp0NWs5Y3FxbUNoYW54QWF6VEd4Sk12R3hZREFwTmtYZURXNU1QWmdaUmtqUmdEMXlhaWc1S0NFZ0FhVmJnOHpydllqTVRpMUJ6cWREcFBwa2VTRm1Kd2llajlZTlkiLCJuYmYiOjE3NDg0NDk5OTksImlzcyI6ImRpZDprZXk6ejJkbXpEODFjZ1B4OFZraTdKYnV1TW1GWXJXUGdZb3l0eWtVWjNleXFodDFqOUticlRRV1BUSk10MkZ1MTZIODR5bXdiYkc5TEdOaW5XN1luajUzWkNBVzE2Z3JBaEJpd3Y1M0FuYnY3ODdodDZueGFLTUdHQWdZOVdqdEZ4WVozaGpHZE1kMVNodVFvU3ZOZVh4Y2o1SmNiazJ1WXRmR2J3aW9GU2laUVhmekg3Y3RoaSIsImNuZiI6eyJqd2siOnsia3R5IjoiRUMiLCJjcnYiOiJQLTI1NiIsIngiOiI0OXJrcUxQb2JSRWdjcDZSSHpKNTJsNWdjQXpmSG9yZWVXbWtMTTdhQzJ3IiwieSI6IlQ2SFB5OWZnN1FOV2RvTWt2UFVOajBLeFgtUVIzeS14NUdKbmtnc2hzZnMifX0sImV4cCI6MjA2Mzk4Mjc5OSwidmMiOnsiQGNvbnRleHQiOlsiaHR0cHM6Ly93d3cudzMub3JnLzIwMTgvY3JlZGVudGlhbHMvdjEiXSwidHlwZSI6WyJWZXJpZmlhYmxlQ3JlZGVudGlhbCIsIjAwMDAwMDAwX2RlbW9fZHJpdmluZ2xpY2Vuc2VfMjAyNTA0MjUxNDE4Il0sImNyZWRlbnRpYWxTdGF0dXMiOnsidHlwZSI6IlN0YXR1c0xpc3QyMDIxRW50cnkiLCJpZCI6Imh0dHBzOi8vaXNzdWVyLXZjLndhbGxldC5nb3YudHcvYXBpL3N0YXR1cy1saXN0LzAwMDAwMDAwX2RlbW9fZHJpdmluZ2xpY2Vuc2VfMjAyNTA0MjUxNDE4L3IwIzIwIiwic3RhdHVzTGlzdEluZGV4IjoiMjAiLCJzdGF0dXNMaXN0Q3JlZGVudGlhbCI6Imh0dHBzOi8vaXNzdWVyLXZjLndhbGxldC5nb3YudHcvYXBpL3N0YXR1cy1saXN0LzAwMDAwMDAwX2RlbW9fZHJpdmluZ2xpY2Vuc2VfMjAyNTA0MjUxNDE4L3IwIiwic3RhdHVzUHVycG9zZSI6InJldm9jYXRpb24ifSwiY3JlZGVudGlhbFNjaGVtYSI6eyJpZCI6Imh0dHBzOi8vZnJvbnRlbmQud2FsbGV0Lmdvdi50dy9hcGkvc2NoZW1hLzAwMDAwMDAwL2RlbW9kcml2aW5nbGljZW5zZTIwMjUwNDI1MTQxOC9WMS9iNjUzYWQ0Yi0zYjNhLTQ2ZjktYmVjMi1kNjg3Y2U5YzMyMjIiLCJ0eXBlIjoiSnNvblNjaGVtYSJ9LCJjcmVkZW50aWFsU3ViamVjdCI6eyJfc2QiOlsiQWVsYmY0WVl0YzhCRGZhck9NMlA5NWRocHBMWU9rb2hmNkR0Z1VqZmhZVSIsIkdPdjR1Y0pjS0drMEVfb0UwZ2VJbXhTRjg5bm5IcHotUWJOclZWOXcyUm8iLCJMSkxCaGVHa3VFU1N1RXlHQkJ2U01XOXRiMHFab1B1NUtrZjVnMUMzQmZrIiwiWS0tUWIyOG5kcUVHX2YtSEdLczZvMnJJUVpVUGd2RmticWJxTGhzY0hjZyIsImNWMGROYm0wNTlfSEo2c000bkM2eUVSNE1neTdneVV2SVlGUG8tc3U0RkUiLCJyZTU0VTFZZHV5alhXLTQwVlIxc2U5cVhZM081U19UdDFpSzNsUXlUa0Y4Il0sIl9zZF9hbGciOiJzaGEtMjU2In19LCJub25jZSI6Ikk5UTBPQzNOIiwianRpIjoiaHR0cHM6Ly9pc3N1ZXItdmMud2FsbGV0Lmdvdi50dy9hcGkvY3JlZGVudGlhbC9iNzZiOTg4OC01MTFmLTQ5YTAtYjI2Yi0yYjU4YzhjNTczMDIifQ.eGndfGnmzkxRoVMLJaLVZiqxmpiccnMcdq1ytef72fGSRyqSY_tz6EF7nlyNH9FsSOBCZ6RKgfPk6HGNbk3SKg~WyJPVWpCZ1E4RFVnenRRR3dxaWVhZE13IiwibmFtZSIsIumZs-etseeOsiJd~WyJRdWRNTnlPelV2TEJQYXVrT1pfcVlnIiwiaWRfbnVtYmVyIiwiQTIzNDU2Nzg5MCJd~WyI4STBWclR0QnpNdlFFSmxmV2hqS2FBIiwicm9jX2JpcnRoZGF5IiwiMTA0MDYwNSJd~WyJhVVBlVWhVOEtRLTE4eG9DTGVDN1FRIiwidHlwZSIsIuaZrumAmuWwj-Wei-i7iiJd~WyJvQndUa0JUdmQzS2pBSXB3U21XUjNBIiwiY29udHJvbG51bWJlciIsIjQwMTA0MDIwOTE0NDUiXQ~WyJlcGtGMjdwejFVY01naHRYRV96Vi1BIiwiZ0RhdGUiLCIxMDIwNzAxIl0~";
+
+    let [, ...claims] = token_with_claims.split("~");
+    claims = claims.map((c) => c.trim()).filter(Boolean);
+
+    setToken(token_with_claims);
+    setClaimsInput(claims.join("\n"));
     setStatus("✅ Loaded test vector");
   };
 
@@ -150,21 +170,147 @@ export default function AgeVerifier() {
           <textarea
             rows={4}
             value={token}
-            onChange={(e) => setToken(e.target.value)}
+            onChange={(e) => {
+              setToken(e.target.value);
+              let [, ...claims] = e.target.value.split("~");
+              claims = claims.map((c) => c.trim()).filter(Boolean);
+              setClaimsInput(claims.join("\n"));
+            }}
             className="w-full border rounded-lg p-3 font-mono focus:ring-2 focus:ring-indigo-500"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Claims (one per line, base64 encoded)
-          </label>
-          <textarea
-            rows={3}
-            value={claimsInput}
-            onChange={(e) => setClaimsInput(e.target.value)}
-            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
-          />
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Age Claims ({parsedClaims.length} detected)
+            </label>
+            {claimsInput && parsedClaims.length > 0 && (
+              <button
+                onClick={() => setShowClaimsDetails(!showClaimsDetails)}
+                className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+              >
+                {showClaimsDetails ? "Hide Details" : "Show Details"}
+              </button>
+            )}
+          </div>
+
+          {claimsInput ? (
+            <div className="border rounded-lg bg-gray-50">
+              <div className="p-3 border-b bg-gray-100 rounded-t-lg">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    Age Claims from JWT (roc_birthday)
+                  </span>
+                  {parsedClaims.length > 0 ? (
+                    <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">
+                      {parsedClaims.length} age claim
+                      {parsedClaims.length !== 1 ? "s" : ""}
+                    </span>
+                  ) : (
+                    <span className="px-2 py-1 text-xs bg-orange-100 text-orange-800 rounded-full">
+                      No age claims found
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {parsedClaims.length > 0 ? (
+                <>
+                  {showClaimsDetails ? (
+                    <div className="p-4 space-y-3">
+                      {parsedClaims.map((claim, index) => (
+                        <div
+                          key={index}
+                          className="border-l-4 border-indigo-200 pl-4"
+                        >
+                          <div className="text-sm text-gray-600 mb-1">
+                            Age Claim #{claim.index}
+                          </div>
+                          <div className="font-mono text-xs text-gray-800 bg-white p-2 rounded border">
+                            <div className="mb-2">
+                              <span className="text-gray-500">Encoded:</span>
+                              <div className="break-all">{claim.encoded}</div>
+                            </div>
+                            <div>
+                              <span className="text-gray-500">
+                                Decoded (Age Info):
+                              </span>
+                              <div className="text-indigo-600 font-medium">
+                                {claim.decoded}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <div className="text-sm text-gray-600 mb-2">
+                        Age claims detected and ready for verification
+                      </div>
+                      <div className="space-y-2">
+                        {parsedClaims.map((claim, index) => (
+                          <div
+                            key={index}
+                            className="bg-white p-3 rounded border border-indigo-200"
+                          >
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs text-gray-500">
+                                Age Claim #{claim.index}:
+                              </span>
+                              <span className="px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded">
+                                roc_birthday
+                              </span>
+                            </div>
+                            <div className="text-sm text-indigo-600 font-medium font-mono">
+                              {claim.decoded}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="p-4 text-center text-gray-500">
+                  <div className="text-sm mb-2">
+                    No age claims (roc_birthday) found in the JWT token
+                  </div>
+                  <div className="text-xs text-gray-400">
+                    Age verification requires claims containing birth date
+                    information
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 border-t bg-gray-50">
+                <div className="text-xs text-gray-500 mb-2">
+                  All Claims (for verification):
+                </div>
+                <textarea
+                  rows={3}
+                  value={claimsInput}
+                  onChange={(e) => setClaimsInput(e.target.value)}
+                  placeholder="Claims will auto-populate when you enter a JWT token above..."
+                  className="w-full border rounded p-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+              <div className="text-gray-500 mb-2">
+                Age claims will auto-populate when you enter a JWT token
+              </div>
+              <textarea
+                rows={3}
+                value={claimsInput}
+                onChange={(e) => setClaimsInput(e.target.value)}
+                placeholder="Or manually enter claims here (one per line, base64 encoded)..."
+                className="w-full border rounded p-2 text-sm font-mono focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
         </div>
 
         <div>
@@ -220,6 +366,7 @@ export default function AgeVerifier() {
           >
             1. Load Test
           </button>
+
           <button
             onClick={async () => {
               await handleValidate();
@@ -229,6 +376,7 @@ export default function AgeVerifier() {
           >
             2. Validate JWT
           </button>
+
           <button
             onClick={async () => {
               await handleGenerate();
@@ -238,6 +386,7 @@ export default function AgeVerifier() {
           >
             3. Generate Proof
           </button>
+
           <button
             onClick={async () => {
               await handleVerify();
@@ -247,6 +396,7 @@ export default function AgeVerifier() {
           >
             4. Verify Proof
           </button>
+
           <button
             onClick={() => {
               setToken("");
