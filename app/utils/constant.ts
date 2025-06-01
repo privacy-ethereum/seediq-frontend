@@ -35,12 +35,16 @@ export type AgeCircuitInput = {
 export const JWT_CIRCUIT_ASSETS = {
   WASM: "jwt_build/jwt.wasm",
   ZKEY: "bafybeidadhsifsxlnn3jvrnfkarzzyc7v4i4mhzyx6erew6ejkxyfwtemm",
+  AWS_ZKEY:
+    "https://pub-4978b68f456645beb98a3d047eba83a8.r2.dev/bafybeidadhsifsxlnn3jvrnfkarzzyc7v4i4mhzyx6erew6ejkxyfwtemm",
   VKEY: "jwt_build/groth16_vkey.json",
 };
 
 export const AGE_CIRCUIT_ASSETS = {
   WASM: "jwt_build/jwtv2.wasm",
   ZKEY: "bafybeiep6z2otxsinnuq4crcckapn3fmagdkueetugtj5p65nne3cmax4y",
+  AWS_ZKEY:
+    "https://pub-4978b68f456645beb98a3d047eba83a8.r2.dev/groth16_pkeyv2.zkey",
   VKEY: "jwt_build/groth16_vkeyv2.json",
 };
 

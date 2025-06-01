@@ -45,7 +45,14 @@ export class JwtProver {
   static async generateProof(input: JWTCircuitInput) {
     try {
       const wasm = new Uint8Array(await fetchBinary(JWT_CIRCUIT_ASSETS.WASM));
-      const zkey = new Uint8Array(await fetchBinary(JWT_CIRCUIT_ASSETS.ZKEY));
+      let zkey: Uint8Array;
+
+      try {
+        zkey = new Uint8Array(await fetchBinary(JWT_CIRCUIT_ASSETS.AWS_ZKEY));
+      } catch (error) {
+        console.warn("Using IPFS zkey for JWT circuit", error);
+        zkey = new Uint8Array(await fetchBinary(JWT_CIRCUIT_ASSETS.ZKEY));
+      }
 
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
         input,
@@ -80,7 +87,14 @@ export class AgeProver {
   static async generateProof(inputs: AgeCircuitInput) {
     try {
       const wasm = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.WASM));
-      const zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.ZKEY));
+
+      let zkey: Uint8Array;
+      try {
+        zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.AWS_ZKEY));
+      } catch (error) {
+        console.warn("Using IFPS zkey for Age circuit", error);
+        zkey = new Uint8Array(await fetchBinary(AGE_CIRCUIT_ASSETS.ZKEY));
+      }
 
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
         inputs,
